@@ -144,15 +144,6 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Install Apple API key
-        if: matrix.platform == 'macos-latest' || matrix.platform == 'macos-15-intel'
-        run: |
-          mkdir -p ~/.appstoreconnect/private_keys/
-          cd ~/.appstoreconnect/private_keys/
-          echo ${{ secrets.APPLE_API_KEY_BASE64 }} >> AuthKey_${{ secrets.APPLE_API_KEY }}.p8.base64
-          base64 --decode -i AuthKey_${{ secrets.APPLE_API_KEY }}.p8.base64 -o AuthKey_${{ secrets.APPLE_API_KEY }}.p8
-          rm AuthKey_${{ secrets.APPLE_API_KEY }}.p8.base64
-
       - name: Install Codesigning Certificate
         if: matrix.platform == 'macos-latest' || matrix.platform == 'macos-15-intel'
         uses: apple-actions/import-codesign-certs@v3
@@ -209,13 +200,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          ENABLE_CODE_SIGNING: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_PROVIDER_SHORT_NAME: ${{ secrets.APPLE_PROVIDER_SHORT_NAME }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # Stream subprocess stdout/stderr so the hang is visible in logs.
           CARGO_TERM_VERBOSE: "true"
           RUST_BACKTRACE: "1"
@@ -238,12 +228,12 @@ jobs:
       - name: Notarize and staple DMG (macOS)
         if: matrix.platform == 'macos-latest' || matrix.platform == 'macos-15-intel'
         env:
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY_ID}.p8"
           TARGET=$(echo "${{ matrix.args }}" | sed -n 's/.*--target \([a-z0-9_-]*\).*/\1/p')
           DMG_DIR="tauri/src-tauri/target/${TARGET}/release/bundle/dmg"
           # Match the release tag tauri-action resolved from tauri.conf.json's
@@ -258,9 +248,9 @@ jobs:
           for dmg in "${dmgs[@]}"; do
             echo "::group::Notarize $(basename "$dmg")"
             xcrun notarytool submit "$dmg" \
-              --key "$KEY_PATH" \
-              --key-id "$APPLE_API_KEY_ID" \
-              --issuer "$APPLE_API_ISSUER" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
               --wait --timeout 20m
             xcrun stapler staple "$dmg"
             spctl -a -t open --context context:primary-signature -vv "$dmg"
